@@ -28,7 +28,7 @@ export default {
               this.$store.commit('setToken', res.data.token);
               this.$store.commit('setUser', res.data.id);
               this.isRegistered = true;
-                this.$router.push('/home');
+              this.$router.push('/home');
             }else {
               this.message_error = res.response.data;
               this.showDialog = true;
@@ -84,6 +84,12 @@ export default {
              class="toggle-icon"
           ></i>
         </div>
+        <button @click="handleOAuthLogin('google')" class="oauth-button">
+          Login with Google
+        </button>
+        <button @click="handleOAuthLogin('facebook')" class="oauth-button">
+          Login with Facebook
+        </button>
 
         <a class="link" href="#" style="color: #02513D; font-style:italic; font-size: 0.8rem;">Forgot your password?</a>
 
@@ -104,6 +110,7 @@ export default {
       <pv-button class="py-3 px-5" label="OK" @click="showDialog = false"/>
     </div>
   </pv-dialog>
+
 </template>
 
 <style scoped>
@@ -180,11 +187,11 @@ export default {
 }
 .password-field {
   align-self: center;
-   position: relative;
-   width: 90%;
-   display:flex;
-   align-items: center;
- }
+  position: relative;
+  width: 90%;
+  display:flex;
+  align-items: center;
+}
 
 .input-field {
   flex: 1;
@@ -221,6 +228,19 @@ export default {
   .button {
     width: 100%;
   }
+}
+.oauth-button {
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  margin: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.oauth-button:hover {
+  background-color: #357ae8;
 }
 
 </style>
