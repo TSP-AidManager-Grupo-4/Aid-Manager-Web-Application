@@ -25,6 +25,7 @@ const routes = [
     { path: '/subscription', component: Subscription, meta: { title: 'Subscription' } },
     { path: '/oauth/callback', component: OAuthCallback, meta: { title: 'Authenticating...' } },
     { path: '/connect/:userId', name: 'oauth-connect', component: OAuthCallback, meta: { title: 'Authenticating...' } },
+    { path: '/auth/callback', name: 'OAuthCallback', component: () => import('../pages/login/oauthcallback.vue') },
     { path: '/', redirect: '/login' },
     {
         path: '/',

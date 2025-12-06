@@ -40,13 +40,22 @@ export default {
         bio: false,
         profileImg: false
       },
-       tasks: [],
-    taskFilters: {
-      status: '',
-      date: ''
-    }
-
-    }
+      tasks: [],
+      taskFilters: {
+        status: '',
+        date: ''
+      },
+      roleUpdateStatus: '',
+      selectedRole: '',
+      orgInput: {
+        orgName: '',
+        country: '',
+        email: '',
+        orgCode: ''
+      },
+      isSubmittingOrg: false,
+      countries: ['Spain', 'USA', 'UK', 'Germany', 'France', 'Italy', 'Portugal', 'Other']
+    };
   },
   methods: {
     clearInputUpdateInfo() {
@@ -112,68 +121,124 @@ export default {
     },
 
     async updateProfile() {
+      // Validate that at least one field was edited and has a value
+      const hasChanges = (
+        (this.editField.fullName && this.inputUpdateInfo.firstName && this.inputUpdateInfo.lastName) ||
+        (this.editField.email && this.inputUpdateInfo.email)
+      );
 
-      // verificamos si los campos de entrada están vacíos
-      if (((!this.inputUpdateInfo.firstName || !this.inputUpdateInfo.lastName) && this.editField['fullName'])|| (!this.inputUpdateInfo.age && this.editField['age']) || (!this.inputUpdateInfo.phone && this.editField['phone']) || (!this.inputUpdateInfo.occupation && this.editField['occupation']) || (!this.inputUpdateInfo.bio && this.editField['bio']) || (!this.inputUpdateInfo.profileImg && this.editField['profileImg'])
-      ) {
+      if (!hasChanges) {
         this.isFieldsEmpty = true;
         return;
       }
 
-      // si no se ha dado click en el lapiz para editar el campo, se le asigna el valor actual del usuario
-      if (!this.editField['fullName']) {
-        this.user.name = this.inputUpdateInfo.firstName + " " + this.inputUpdateInfo.lastName;
-        
-      }
-      if (!this.editField['email']) {
-        this.inputUpdateInfo.email = this.user.email;
-      }
-      if (!this.editField['age']) {
-        this.inputUpdateInfo.age = this.user.age;
-      }
-      if (!this.editField['phone']) {
-        this.inputUpdateInfo.phone = this.user.phone;
-      }
-      if (!this.editField['occupation']) {
-        this.inputUpdateInfo.occupation = this.user.occupation;
-      }
-      if (!this.editField['bio']) {
-        this.inputUpdateInfo.bio = this.user.bio;
-      }
-      if (!this.editField['profileImg']) {
-        this.inputUpdateInfo.profileImg = this.user.profileImg;
-      }
+      try {
+        // Build update payload with edited fields
+        const updatePayload = {
+          firstName: this.editField.fullName ? this.inputUpdateInfo.firstName : this.user.firstName,
+          lastName: this.editField.fullName ? this.inputUpdateInfo.lastName : this.user.lastName,
+          email: this.editField.email ? this.inputUpdateInfo.email : this.user.email,
+          profileImg: this.editField.profileImg ? this.inputUpdateInfo.profileImg : this.user.profileImg
+        };
 
-      // usamos el spread operator "..." para planchar la data del form en el estado user
-      // , ademas incluyendo el id que recibimos por parametro de la ruta
-      const newUser = {
-        ...this.user,
-        ...this.inputUpdateInfo,
-        id: this.$route.params.id
-      };
+        console.log('📝 Updating user profile with:', updatePayload);
 
-      const response = this.userService.updateUser(newUser);
-      response.then((data) => {
-        console.log('data', data)
-        const user = data;
-        this.$store.dispatch('updateUser', user);
+        // Call service to update user
+        const response = await this.userService.updateUserProfile(this.user.id, updatePayload);
+        console.log('✅ Profile updated:', response);
 
-        this.clearInputUpdateInfo(); // limpamos el form luego de enviado
-        this.togglePopUp(); // cerramos el popap >.<
-      })
-      .catch((error) => {
-        console.error('Error al actualizar el usuario:', error);
-      });
+        // Update store with new user data
+        const updatedUser = {
+          ...this.user,
+          ...response
+        };
+        this.$store.commit('setUser', updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+
+        // Reset form
+        this.clearInputUpdateInfo();
+        this.togglePopUp();
+      } catch (error) {
+        console.error('❌ Error updating profile:', error);
+        this.isFieldsEmpty = true;
+      }
 
     },
     async fetchUserTasks() {
-    // Reemplaza esto por tu servicio real
-    const allTasks = await fetchAllTaskDataByUserId(1,this.user.id);
-    this.tasks = allTasks;
-  },
-  goToProject(projectId) {
-  this.$router.push({ name: 'projectTodo', params: { id: projectId } });  }
-
+      // Reemplaza esto por tu servicio real
+      const allTasks = await fetchAllTaskDataByUserId(1, this.user.id);
+      this.tasks = allTasks;
+    },
+    selectRole(role) {
+      this.selectedRole = role;
+      this.roleUpdateStatus = '';
+      this.orgInput = { orgName: '', country: '', email: '', orgCode: '' };
+    },
+    async submitManagerOrg() {
+      if (!this.orgInput.orgName || !this.orgInput.country || !this.orgInput.email) {
+        this.roleUpdateStatus = 'error';
+        return;
+      }
+      this.isSubmittingOrg = true;
+      try {
+        const payload = {
+          firstName: this.user.firstName,
+          lastName: this.user.lastName,
+          profileImg: this.user.profileImg,
+          role: 0,
+          companyName: this.orgInput.orgName,
+          companyEmail: this.orgInput.email,
+          companyCountry: this.orgInput.country,
+          companyCode: null
+        };
+        const result = await this.userService.completeOAuth(this.user.id, payload);
+        this.$store.dispatch('updateUser', result);
+        localStorage.setItem('user', JSON.stringify(result));
+        this.roleUpdateStatus = 'success';
+        setTimeout(() => {
+          this.$router.push('/home');
+        }, 1500);
+      } catch (e) {
+        console.error('Error completing manager setup:', e);
+        this.roleUpdateStatus = 'error';
+      } finally {
+        this.isSubmittingOrg = false;
+      }
+    },
+    async submitTeamMemberOrg() {
+      if (!this.orgInput.orgCode) {
+        this.roleUpdateStatus = 'error';
+        return;
+      }
+      this.isSubmittingOrg = true;
+      try {
+        const payload = {
+          firstName: this.user.firstName,
+          lastName: this.user.lastName,
+          profileImg: this.user.profileImg,
+          role: 1,
+          companyName: null,
+          companyEmail: null,
+          companyCountry: null,
+          companyCode: this.orgInput.orgCode
+        };
+        const result = await this.userService.completeOAuth(this.user.id, payload);
+        this.$store.dispatch('updateUser', result);
+        localStorage.setItem('user', JSON.stringify(result));
+        this.roleUpdateStatus = 'success';
+        setTimeout(() => {
+          this.$router.push('/home');
+        }, 1500);
+      } catch (e) {
+        console.error('Error completing team member setup:', e);
+        this.roleUpdateStatus = 'error';
+      } finally {
+        this.isSubmittingOrg = false;
+      }
+    },
+    goToProject(projectId) {
+      this.$router.push({ name: 'projectTodo', params: { id: projectId } });
+    }
   },
   
   mounted() {
@@ -186,71 +251,190 @@ export default {
 </script>
 
 <template>
+
   <div class="content">
-    <div class="profile-content flex">
-      <form class="flex user-info form__update-profile" @submit.prevent="updateProfile">
-        <h2>{{user.firstName + " " + user.lastName}}'s profile:</h2>
-
-        <p class="editable flex flex-col  gap-2">
-          <strong>Full Name:</strong>
-          <span v-if="!editField['fullName']">{{ user.name}} </span>
-          <div v-else class="full-name-input">
-            <input type="text" placeholder="First Name" v-model="inputUpdateInfo['firstName']" >
-            <input type="text" placeholder="Last Name" v-model="inputUpdateInfo['lastName']" >
-          </div>
-          <i v-if="!editField['fullName'] && showPopUp" class="pi pi-pencil edit-icon" @click="toggleEditField('fullName')"></i>
-
-        </p>
-
-        <p class="editable flex gap-2"><strong>Age: </strong>
-          <span v-if="user.age === 0 && !editField['age']">No info to display</span>
-          <span v-if="!editField['age'] && user.age !== 0"> {{ user.age}} years</span>
-          <input v-if="editField['age']" type="number" placeholder="Age" v-model="inputUpdateInfo['age']" >
-          <i v-if="!editField['age'] && showPopUp" class="pi pi-pencil edit-icon" @click="toggleEditField('age')"></i>
-        </p>
-
-        <p class="editable flex gap-2"><strong>Email: </strong>
-          <span class="non-editable">{{ user.email}}</span>
-        </p>
-
-        <p class="editable flex gap-2"><strong>ONG:</strong>
-        <span class="non-editable">{{ user.companyName}}</span>
-        </p>
-
-        <p class="editable flex gap-2"><strong>Phone: </strong>
-          <span v-if="!editField['phone'] && user.phone === ''">No info to display</span>
-          <span v-if="!editField['phone']">{{ user.phone}} </span>
-          <input v-else type="text" placeholder="Phone" v-model="inputUpdateInfo['phone']" >
-          <i v-if="!editField['phone'] && showPopUp" class="pi pi-pencil edit-icon" @click="toggleEditField('phone')"></i>
-        </p>
-
-        <p class="editable flex gap-2"><strong>Occupation: </strong>
-          <span v-if="!editField['occupation'] && user.occupation === ''">No info to display</span>
-          <span v-if="!editField['occupation']">{{ user.occupation }} </span>
-          <input v-else type="text" placeholder="Ocupation" v-model="inputUpdateInfo['occupation']" >
-          <i v-if="!editField['occupation'] && showPopUp" class="pi pi-pencil edit-icon" @click="toggleEditField('occupation')"></i>
-        </p>
-
-        <p class="editable"><strong>Bio: </strong>
-          <span v-if="!editField['bio'] && user.bio === ''">No info to display</span>
-          <span v-if="!editField['bio']">{{ user.bio}} </span>
-          <textarea v-else placeholder="Bio" v-model="inputUpdateInfo['bio']" ></textarea>
-          <i v-if="!editField['bio'] && showPopUp" class="pi pi-pencil edit-icon" @click="toggleEditField('bio')"></i>
-        </p>
-
-        <button v-if="!showPopUp" class="edit-button" @click="togglePopUp">Edit profile</button>
-        <button v-else class="edit-button" type="submit">Save changes</button>
-
-      </form>
-
-      <div class="flex flex-col">
-        <div class="avatar-wrapper">
-          <div class="avatar-image">
-            <img :src="user.profileImg || 'https://static.vecteezy.com/system/resources/previews/009/292/244/non_2x/default-avatar-icon-of-social-media-user-vector.jpg'" alt="User Photo">
-            <div class="avatar-content" @click="ToggleInputProfileImage">
-              <i class="pi pi-camera" style="font-size: 4rem; color: #9f9f9f;"></i>
+    <div class="profile-card">
+      <div class="profile-header">
+        <div class="avatar-section">
+          <div class="avatar-wrapper">
+            <img :src="user.profileImg || 'https://static.vecteezy.com/system/resources/previews/009/292/244/non_2x/default-avatar-icon-of-social-media-user-vector.jpg'" alt="User Photo" class="avatar-img">
+            <div class="avatar-overlay" @click="ToggleInputProfileImage">
+              <i class="pi pi-camera"></i>
             </div>
           </div>
+        </div>
+        <div class="profile-header-info">
+          <h2 class="profile-name">{{ (user.firstName || '') + ' ' + (user.lastName || '') }}</h2>
+          <p class="profile-email">{{ user.email || 'No email' }}</p>
+          <span class="profile-role-badge" :class="user.role ? 'active' : 'inactive'">
+            <i :class="user.role === 'Manager' ? 'pi pi-chart-bar' : 'pi pi-users'"></i>
+            {{ user.role || 'No role assigned' }}
+          </span>
+        </div>
+      </div>
+      
+      <div class="profile-body">
+        <div class="info-grid">
+          <div class="info-item">
+            <i class="pi pi-user info-icon"></i>
+            <div class="info-content">
+              <span class="info-label">First Name</span>
+              <span class="info-value">{{ user.firstName || 'No info' }}</span>
+            </div>
+          </div>
+          <div class="info-item">
+            <i class="pi pi-user info-icon"></i>
+            <div class="info-content">
+              <span class="info-label">Last Name</span>
+              <span class="info-value">{{ user.lastName || 'No info' }}</span>
+            </div>
+          </div>
+          <div class="info-item">
+            <i class="pi pi-building info-icon"></i>
+            <div class="info-content">
+              <span class="info-label">Company ID</span>
+              <span class="info-value">{{ user.companyId !== undefined ? user.companyId : 'No info' }}</span>
+            </div>
+          </div>
+          <div class="info-item">
+            <i class="pi pi-briefcase info-icon"></i>
+            <div class="info-content">
+              <span class="info-label">Role</span>
+              <span class="info-value">{{ user.role || 'Not set' }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="profile-actions">
+          <button v-if="!showPopUp" class="edit-button" @click="togglePopUp">
+            <i class="pi pi-user-edit"></i>
+            Edit Profile
+          </button>
+          <button v-else class="edit-button save-btn" type="submit" @click="updateProfile">
+            <i class="pi pi-check"></i>
+            Save Changes
+          </button>
+        </div>
+
+        <!-- Edit Form Modal -->
+        <div v-if="showPopUp" class="edit-form-modal">
+          <h3>Edit Profile</h3>
+          <form @submit.prevent="updateProfile">
+            <div class="form-group">
+              <label>First Name</label>
+              <input 
+                v-model="inputUpdateInfo.firstName" 
+                type="text" 
+                :placeholder="user.firstName || 'First Name'"
+                @focus="editField.fullName = true"
+              />
+            </div>
+            <div class="form-group">
+              <label>Last Name</label>
+              <input 
+                v-model="inputUpdateInfo.lastName" 
+                type="text" 
+                :placeholder="user.lastName || 'Last Name'"
+                @focus="editField.fullName = true"
+              />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input 
+                v-model="inputUpdateInfo.email" 
+                type="email" 
+                :placeholder="user.email || 'Email'"
+                @focus="editField.email = true"
+              />
+            </div>
+            <div class="form-group">
+              <label>Profile Image URL</label>
+              <input 
+                v-model="inputUpdateInfo.profileImg" 
+                type="text" 
+                :placeholder="user.profileImg || 'Image URL'"
+                @focus="editField.profileImg = true"
+              />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-save">
+                <i class="pi pi-check"></i>
+                Save Changes
+              </button>
+              <button type="button" class="btn-cancel" @click="togglePopUp">
+                <i class="pi pi-times"></i>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Onboarding Stepper for missing role -->
+    <div v-if="!user.role" class="onboarding-container">
+      <div class="onboarding-stepper">
+        <i class="pi pi-user-plus card-icon"></i>
+        <h3>Welcome to Aid Manager</h3>
+        <p>Please select your role to continue:</p>
+        <div class="role-select">
+          <button class="role-btn" @click="selectRole('Manager')">
+            <i class="pi pi-chart-bar"></i>
+            <span>Manager</span>
+          </button>
+          <button class="role-btn" @click="selectRole('TeamMember')">
+            <i class="pi pi-users"></i>
+            <span>Team Member</span>
+          </button>
+        </div>
+
+        <!-- Manager Form -->
+        <form v-if="selectedRole === 'Manager'" class="onboarding-form" @submit.prevent="submitManagerOrg">
+          <h4>Create Your Organization</h4>
+          <div class="form-group">
+            <label>Organization Name</label>
+            <input v-model="orgInput.orgName" type="text" placeholder="e.g., My Non-Profit" required />
+          </div>
+          <div class="form-group">
+            <label>Country</label>
+            <select v-model="orgInput.country" required>
+              <option value="">Select Country</option>
+              <option v-for="country in countries" :key="country" :value="country">{{ country }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Organization Email</label>
+            <input v-model="orgInput.email" type="email" placeholder="org@example.com" required />
+          </div>
+          <button type="submit" class="submit-role-btn" :disabled="isSubmittingOrg">
+            <i v-if="!isSubmittingOrg" class="pi pi-check"></i>
+            <i v-else class="pi pi-spin pi-spinner"></i>
+            {{ isSubmittingOrg ? 'Creating...' : 'Create Organization' }}
+          </button>
+        </form>
+
+        <!-- Team Member Form -->
+        <form v-if="selectedRole === 'TeamMember'" class="onboarding-form" @submit.prevent="submitTeamMemberOrg">
+          <h4>Join Organization</h4>
+          <div class="form-group">
+            <label>Organization Code</label>
+            <input v-model="orgInput.orgCode" type="text" placeholder="e.g., ORG-ABC123" required />
+          </div>
+          <button type="submit" class="submit-role-btn" :disabled="isSubmittingOrg">
+            <i v-if="!isSubmittingOrg" class="pi pi-check"></i>
+            <i v-else class="pi pi-spin pi-spinner"></i>
+            {{ isSubmittingOrg ? 'Joining...' : 'Join Organization' }}
+          </button>
+        </form>
+
+        <!-- Status Messages -->
+        <div v-if="roleUpdateStatus === 'success'" class="role-success">
+          <i class="pi pi-check-circle"></i>
+          Setup completed! Redirecting...
+        </div>
+        <div v-if="roleUpdateStatus === 'error'" class="role-error">
+          <i class="pi pi-exclamation-triangle"></i>
+          Error: Please check your inputs and try again.
         </div>
       </div>
     </div>
@@ -321,143 +505,553 @@ export default {
 
 <style scoped>
 
-.content {
-  padding:30px;
+/* Modern Profile Card Design */
+.profile-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  max-width: 900px;
+  margin: 0 auto;
 }
-.user-info {
-  width: 50%;
-  justify-content:center;
-  margin-right: 10%;
-  flex-direction: column;
+
+.profile-header {
+  background: linear-gradient(135deg, #d4f1e4 0%, #a8e6d3 100%);
+  padding: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
 }
-.user-info p, h2 {
-  margin-bottom: 12px;
+
+.avatar-section {
+  flex-shrink: 0;
 }
-.user-info p:last-child {
-  margin-bottom: 0;
+
+.avatar-wrapper {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  border: 4px solid white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
-.edit-icon {
-  color: #9f9f9f;
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
   transition: opacity 0.3s ease;
-}
-.editable {
-}
-.non-editable {
-  color: #737373;
-}
-.editable:hover .edit-icon {
-  opacity: 1;
   cursor: pointer;
 }
 
-
-.profile-wrapper i {
-  border-bottom-left-radius: 8px;
+.avatar-overlay:hover {
+  opacity: 1;
 }
-.full-name-input input {
-  margin-right: 10px;
-  width: 47%;
+
+.avatar-overlay i {
+  font-size: 2rem;
+  color: white;
+}
+
+.profile-header-info {
+  flex: 1;
+  min-width: 200px;
+}
+
+.profile-name {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #02513D;
+  margin: 0 0 0.5rem 0;
+}
+
+.profile-email {
+  color: #555;
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+}
+
+.profile-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.profile-role-badge.active {
+  background: #02513D;
+  color: white;
+}
+
+.profile-role-badge.inactive {
+  background: #e0e0e0;
+  color: #666;
+}
+
+.profile-body {
+  padding: 2rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 10px;
+  border-left: 4px solid #02513D;
+}
+
+.info-icon {
+  font-size: 1.5rem;
+  color: #02513D;
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+.info-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-size: 1rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.content {
+  padding: 30px;
 }
 
 .edit-button {
-  border: 1px solid #02513D;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  border: 2px solid #02513D;
   background-color: transparent;
-  max-width: 180px;
   color: #02513D;
-  padding: 10px 20px;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 16px;
-  margin-top: 20px;
-  transition: background-color 0.3s;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 
 .edit-button:hover {
   background-color: #02513D;
   color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(2, 81, 61, 0.3);
 }
 
-.form__update-profile {
-  padding: .7rem;
-  font-family: "Poppins", sans-serif;
+.edit-button.save-btn {
+  background-color: #02513D;
+  color: white;
 }
 
-.form__update-profile input {
-  padding: 0.4rem;
-  border-radius: 10px;
-  outline: none;
-  resize: none;
-  border: 1px solid #DDDDDD;
+.edit-button.save-btn:hover {
+  background-color: #037c5a;
 }
 
-.avatar-wrapper {
-  width: 100%;
-  height: auto;
+
+
+/* Onboarding Container and Stepper Styles */
+.onboarding-container {
+  margin-top: 2rem;
   display: flex;
-  align-items:center;
   justify-content: center;
+  padding: 0 20px;
 }
-.avatar-image {
-  width: 300px;
-  height: 350px;
-  position:relative;
-}
-img {
-  width:100%;
-  display:block;
-  margin:auto;
-}
-.avatar-content {
+
+.onboarding-stepper {
   width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
+  max-width: 500px;
+  padding: 2.5rem;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  text-align: center;
+}
+
+.card-icon {
+  font-size: 3rem;
+  color: #02513D;
+  margin-bottom: 1rem;
+}
+
+.onboarding-stepper h3 {
+  font-size: 1.8rem;
+  margin: 0.5rem 0;
+  color: #02513D;
+  font-weight: 700;
+}
+
+.onboarding-stepper p {
+  color: #666;
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+
+.role-select {
   display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.role-btn {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  opacity: 0;
-  transition: all .5s ease-in-out;
-}
-.avatar-content:hover{
-  opacity: 1;
+  gap: 0.5rem;
+  padding: 1.2rem 2rem;
+  border: 2px solid #02513D;
+  border-radius: 12px;
+  background: white;
+  color: #02513D;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 140px;
 }
-@media only screen and (max-width: 700px) {
-  .profile-content {
-    width: 100%;
-    height: auto;
-    flex-direction: column;
+
+.role-btn i {
+  font-size: 1.8rem;
+}
+
+.role-btn:hover:not(:disabled) {
+  background: #02513D;
+  color: white;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(2, 81, 61, 0.3);
+}
+
+.role-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submit-role-btn {
+  width: 100%;
+  display: flex;
   align-items: center;
-  }
-  .user-info{
-    width: 100%;
-    margin-right: 0;
-  }
-}
-@media only screen and (max-width: 800px) {
-  .full-name-input input {
-    width: 100%;
-    margin-right: 0;
-  }
-
-  .user-info p,
-  h2 {
-    margin-bottom: 0.5rem;
-  }
-
-  .editable p {
-    margin-right: 0.5rem;
-  }
-
-  .edit-button {
-    margin-top: 1rem;
-  }
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border: none;
+  border-radius: 8px;
+  background: #02513D;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
 }
 
+.submit-role-btn:hover:not(:disabled) {
+  background: #037c5a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(2, 81, 61, 0.3);
+}
 
+.submit-role-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
+/* Edit Form Modal Styles */
+.edit-form-modal {
+  background: #f8f9fa;
+  padding: 2rem;
+  border-radius: 12px;
+  margin-top: 1.5rem;
+  border: 2px solid #d4f1e4;
+}
+
+.edit-form-modal h3 {
+  margin: 0 0 1.5rem 0;
+  color: #02513D;
+  font-weight: 700;
+  font-size: 1.3rem;
+}
+
+.edit-form-modal .form-group {
+  margin-bottom: 1.3rem;
+}
+
+.edit-form-modal .form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.edit-form-modal .form-group input {
+  width: 100%;
+  padding: 0.85rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-sizing: border-box;
+  background: white;
+}
+
+.edit-form-modal .form-group input:focus {
+  border-color: #02513D;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(2, 81, 61, 0.1);
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.btn-save,
+.btn-cancel {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #02513D 0%, #03754F 100%);
+  color: white;
+}
+
+.btn-save:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(2, 81, 61, 0.3);
+}
+
+.btn-cancel {
+  background: white;
+  color: #666;
+  border: 2px solid #e0e0e0;
+}
+
+.btn-cancel:hover {
+  border-color: #666;
+  background: #f5f5f5;
+}
+
+.onboarding-form {
+  background: #f8f9fa;
+  padding: 2rem;
+  border-radius: 12px;
+  text-align: left;
+  margin-bottom: 1rem;
+}
+
+.onboarding-form h4 {
+  margin: 0 0 1.5rem 0;
+  color: #02513D;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.form-group {
+  margin-bottom: 1.3rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.85rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-sizing: border-box;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #02513D;
+  box-shadow: 0 0 0 3px rgba(2, 81, 61, 0.1);
+}
+
+.role-success {
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-top: 1rem;
+  border: 1px solid #a5d6a7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.role-success i {
+  font-size: 1.2rem;
+}
+
+.role-error {
+  background: #ffebee;
+  color: #c62828;
+  padding: 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-top: 1rem;
+  border: 1px solid #ef5350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.role-error i {
+  font-size: 1.2rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .profile-header-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .onboarding-stepper {
+    padding: 1.5rem;
+    margin: 0 10px;
+  }
+
+  .onboarding-stepper h3 {
+    font-size: 1.5rem;
+  }
+
+  .role-select {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .role-btn {
+    width: 100%;
+  }
+
+  .onboarding-form {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-card {
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .profile-header {
+    padding: 1.5rem;
+  }
+
+  .profile-body {
+    padding: 1.5rem;
+  }
+
+  .avatar-wrapper {
+    width: 100px;
+    height: 100px;
+  }
+
+  .profile-name {
+    font-size: 1.5rem;
+  }
+
+  .info-item {
+    padding: 0.75rem;
+  }
+
+  .onboarding-stepper {
+    padding: 1.25rem;
+  }
+
+  .card-icon {
+    font-size: 2.5rem;
+  }
+}
 
 </style>

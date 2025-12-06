@@ -2,12 +2,83 @@ import axios from "axios";
 import {environment} from "@/environment/environment.js";
 
 export class UserService {
+    // ...existing code...
+    // Complete OAuth onboarding (manager or team member)
+    async completeOAuth(userId, payload, oauthToken) {
+        try {
+            console.log('🔧 completeOAuth service call:', {
+                url: `users/complete-oauth/${userId}`,
+                hasToken: !!oauthToken,
+                payloadKeys: Object.keys(payload)
+            });
+            
+            // This endpoint creates the user in the backend using OAuth token
+            const response = await this.http.post(`users/complete-oauth/${userId}`, payload, {
+                headers: {
+                    'Authorization': `Bearer ${oauthToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log('✅ completeOAuth response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error in completeOAuth service:', {
+                message: error.message,
+                status: error.response?.status,
+                data: error.response?.data,
+                url: error.config?.url
+            });
+            throw error;
+        }
+    }
 
     http = null;
     constructor() {
         this.http = axios.create({
             baseURL: environment.baseUrl
-        })
+        });
+
+        // Interceptor para manejar headers de autorización
+        // Los endpoints públicos de OAuth no deben enviar Authorization
+        this.http.interceptors.request.use(
+            config => {
+                // Lista de endpoints públicos que NO requieren token
+                const publicEndpoints = [
+                    '/authorize',
+                    'authorize',
+                    '/authorize/callback',
+                    'authorize/callback',
+                    '/authorize/token/',
+                    'authorize/token/',
+                    '/connect/',
+                    'connect/',
+                    '/users/sign-up',
+                    'users/sign-up',
+                    '/users/complete-oauth/',
+                    'users/complete-oauth/',
+                    '/authentication/sign-in',
+                    'authentication/sign-in'
+                ];
+
+                // Verificar si el endpoint es público
+                const isPublic = publicEndpoints.some(endpoint => {
+                    const url = config.url || '';
+                    return url.includes(endpoint) || url.startsWith(endpoint);
+                });
+
+                // Si es público, NO agregar el header de Authorization
+                if (!isPublic) {
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                        config.headers.Authorization = `Bearer ${token}`;
+                    }
+                }
+
+                return config;
+            },
+            error => Promise.reject(error)
+        );
     }
 
     async signUpUser(user) {
@@ -36,12 +107,12 @@ export class UserService {
     // Este endpoint NO requiere bearer token
     async initiateGoogleOAuth() {
         try {
-            console.log('🔷 UserService: Llamando a GET api/v1/authorize');
+            console.log('🔷 UserService: Llamando a GET authorize');
             console.log('🔷 baseURL:', this.http.defaults.baseURL);
-            console.log('🔷 URL completa:', `${this.http.defaults.baseURL}/api/v1/authorize`);
+            console.log('🔷 URL completa:', `${this.http.defaults.baseURL}/authorize`);
 
-            // GET /api/v1/authorize - devuelve la URL de autorización de Google
-            const response = await this.http.get('api/v1/authorize', {
+            // GET /authorize - devuelve la URL de autorización de Google
+            const response = await this.http.get('authorize', {
                 validateStatus: function (status) {
                     // Aceptar cualquier status para poder manejarlo nosotros
                     return status < 600;
@@ -86,9 +157,9 @@ export class UserService {
     // Método para manejar el callback de Google OAuth2 con el código
     async handleGoogleCallback(code) {
         try {
-            // GET /api/v1/authorize/callback?code={code}
+            // GET /authorize/callback?code={code}
             // Este endpoint procesa el código de Google
-            const response = await this.http.get('api/v1/authorize/callback', {
+            const response = await this.http.get('authorize/callback', {
                 params: { code }
             });
             console.log('Respuesta del callback:', response);
@@ -100,16 +171,16 @@ export class UserService {
     }
 
     // Método para obtener el token usando el userId
-    // GET /api/v1/authorize/token/{userId}
+    // GET /authorize/token/{userId}
     // IMPORTANTE: Este endpoint NO debe requerir bearer token
     async getTokenByUserId(userId) {
         try {
-            console.log('🔷 UserService: Llamando a GET api/v1/authorize/token/' + userId);
-            console.log('🔷 URL completa:', `${this.http.defaults.baseURL}/api/v1/authorize/token/${userId}`);
+            console.log('🔷 UserService: Llamando a GET authorize/token/' + userId);
+            console.log('🔷 URL completa:', `${this.http.defaults.baseURL}/authorize/token/${userId}`);
 
             // NO enviar headers de autorización para este endpoint
             // porque es parte del flujo de login
-            const response = await this.http.get(`api/v1/authorize/token/${userId}`, {
+            const response = await this.http.get(`authorize/token/${userId}`, {
                 // Sin headers de autorización
                 headers: {
                     'Content-Type': 'application/json'
@@ -209,6 +280,19 @@ export class UserService {
         }
     }
 
+    async updateUserProfile(userId, payload) {
+        try {
+            console.log('🔧 updateUserProfile service call:', { userId, payload });
+            
+            const response = await this.http.put(`users/${userId}`, payload);
+            console.log('✅ updateUserProfile response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error updating user profile:', error);
+            throw error;
+        }
+    }
+
     async updateUser(user) {
         try {
             const headers = this.getHeadersAuthorization();
@@ -265,6 +349,20 @@ export class UserService {
         return {
             "Authorization": `Bearer ${localStorage.getItem('token')}`,
             "Content-Type": "application/json"
+        }
+    }
+
+    // Complete OAuth onboarding (manager or team member)
+    async completeOAuth(userId, payload) {
+        try {
+            // This endpoint should NOT send Authorization header (public for onboarding)
+            const response = await this.http.post(`users/complete-oauth/${userId}`, payload, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error in completeOAuth:', error);
+            throw error;
         }
     }
 }

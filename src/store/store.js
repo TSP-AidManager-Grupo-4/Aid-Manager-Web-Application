@@ -17,15 +17,24 @@ export const store = createStore({
             state.token = token;
             localStorage.setItem('token', token);
         },
-        setUser(state, userId) {
-            console.log('Trying to get user with ID:', userId);
-            userService.getUserById(userId).then((response)=>{
-                state.user = response.data;
-                localStorage.setItem('user', JSON.stringify(response.data));
-                console.log('User data retrieved:', response.data);
-            })
-            // se llama al metodo cuando el usuario se logeo y manda la data al local storage
-            // para que la data persista cuando se haga un reload
+        setUser(state, userData) {
+            // If userData is a full user object (has email, firstName, etc), use it directly
+            if (userData && typeof userData === 'object' && (userData.email || userData.firstName)) {
+                state.user = userData;
+                localStorage.setItem('user', JSON.stringify(userData));
+                console.log('User data set directly:', userData);
+            } 
+            // If userData is just an ID string/number, fetch the full user data
+            else if (userData && (typeof userData === 'string' || typeof userData === 'number')) {
+                console.log('Trying to get user with ID:', userData);
+                userService.getUserById(userData).then((response) => {
+                    state.user = response.data;
+                    localStorage.setItem('user', JSON.stringify(response.data));
+                    console.log('User data retrieved:', response.data);
+                }).catch((error) => {
+                    console.error('Error fetching user data:', error);
+                });
+            }
         },
         removeUser( state ) {
             state.user = User;
