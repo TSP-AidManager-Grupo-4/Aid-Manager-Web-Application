@@ -14,6 +14,7 @@ import Profile from "@/pages/profile.component.vue";
 import ProjectsComponent from "@/pages/projects.component.vue";
 import Subscription from "@/pages/subscription/subscription-content.component.vue";
 import Identification from "@/pages/identification-frame/identification-frame.component.vue";
+import OAuthCallback from "@/pages/login/oauthcallback.vue";
 
 const routes = [
     { path: '/login', component: Login, meta: { title: 'Login' } },
@@ -22,13 +23,15 @@ const routes = [
     { path: '/payment', component: PaymentDetails, meta: { title: 'Payments' } },
     { path: '/setup', component: Setup, meta: { title: 'Setup' } },
     { path: '/subscription', component: Subscription, meta: { title: 'Subscription' } },
+    { path: '/oauth/callback', component: OAuthCallback, meta: { title: 'Authenticating...' } },
+    { path: '/connect/:userId', name: 'oauth-connect', component: OAuthCallback, meta: { title: 'Authenticating...' } },
     { path: '/', redirect: '/login' },
     {
         path: '/',
         component: MainLayoutPage,
         children: [
-            { path: 'home', component: Home,meta: { title: 'Home Page' }},
-            { path: 'calendar', component: Calendar,meta: { title: 'Calendar' } },
+            { path: 'home', component: Home, meta: { title: 'Home Page' }},
+            { path: 'calendar', component: Calendar, meta: { title: 'Calendar' } },
             { path: 'projects', component: ProjectsComponent, meta: { title: 'Projects' } },
             { path: 'projects/:id/toDo', name: 'projectTodo', component: todoComponent, props: true, meta: { title: 'Tasks' } },
             { path: 'analytics', component: Analytics, meta: { title: 'Analytics' } },

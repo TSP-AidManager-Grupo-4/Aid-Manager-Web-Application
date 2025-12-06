@@ -30,7 +30,127 @@ export class UserService {
         }catch(e) {
             return e;
         }
+    }
 
+    // Método para iniciar el flujo de Google OAuth2
+    // Este endpoint NO requiere bearer token
+    async initiateGoogleOAuth() {
+        try {
+            console.log('🔷 UserService: Llamando a GET api/v1/authorize');
+            console.log('🔷 baseURL:', this.http.defaults.baseURL);
+            console.log('🔷 URL completa:', `${this.http.defaults.baseURL}/api/v1/authorize`);
+
+            // GET /api/v1/authorize - devuelve la URL de autorización de Google
+            const response = await this.http.get('api/v1/authorize', {
+                validateStatus: function (status) {
+                    // Aceptar cualquier status para poder manejarlo nosotros
+                    return status < 600;
+                }
+            });
+
+            console.log('✅ UserService: Respuesta recibida');
+            console.log('✅ Status:', response.status);
+            console.log('✅ Data:', response.data);
+            console.log('✅ Data type:', typeof response.data);
+
+            // Si el status no es 200, lanzar error
+            if (response.status !== 200) {
+                console.error('❌ Status code no exitoso:', response.status);
+                console.error('❌ Response data:', response.data);
+
+                const error = new Error(`Server error: ${response.status}`);
+                error.response = response;
+                throw error;
+            }
+
+            return response;
+        } catch(e) {
+            console.error('❌ UserService: Error al iniciar Google OAuth');
+            console.error('❌ Error completo:', e);
+            console.error('❌ Error message:', e.message);
+
+            if (e.response) {
+                console.error('❌ Response status:', e.response.status);
+                console.error('❌ Response data:', e.response.data);
+                console.error('❌ Response headers:', e.response.headers);
+            }
+
+            if (e.request) {
+                console.error('❌ Request:', e.request);
+            }
+
+            throw e;
+        }
+    }
+
+    // Método para manejar el callback de Google OAuth2 con el código
+    async handleGoogleCallback(code) {
+        try {
+            // GET /api/v1/authorize/callback?code={code}
+            // Este endpoint procesa el código de Google
+            const response = await this.http.get('api/v1/authorize/callback', {
+                params: { code }
+            });
+            console.log('Respuesta del callback:', response);
+            return response;
+        } catch(e) {
+            console.error('Error en callback de Google OAuth:', e);
+            throw e;
+        }
+    }
+
+    // Método para obtener el token usando el userId
+    // GET /api/v1/authorize/token/{userId}
+    // IMPORTANTE: Este endpoint NO debe requerir bearer token
+    async getTokenByUserId(userId) {
+        try {
+            console.log('🔷 UserService: Llamando a GET api/v1/authorize/token/' + userId);
+            console.log('🔷 URL completa:', `${this.http.defaults.baseURL}/api/v1/authorize/token/${userId}`);
+
+            // NO enviar headers de autorización para este endpoint
+            // porque es parte del flujo de login
+            const response = await this.http.get(`api/v1/authorize/token/${userId}`, {
+                // Sin headers de autorización
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                validateStatus: function (status) {
+                    return status < 600;
+                }
+            });
+
+            console.log('✅ UserService: Respuesta recibida de token endpoint');
+            console.log('✅ Status:', response.status);
+            console.log('✅ Data:', response.data);
+            console.log('✅ Data type:', typeof response.data);
+
+            if (response.status !== 200) {
+                console.error('❌ Status code no exitoso:', response.status);
+                console.error('❌ Response data:', response.data);
+
+                if (response.status === 401) {
+                    console.error('🔴 ERROR 401: El backend requiere que configures [AllowAnonymous]');
+                    console.error('🔴 en el endpoint /api/v1/authorize/token/{userId}');
+                }
+
+                const error = new Error(`Server error: ${response.status}`);
+                error.response = response;
+                throw error;
+            }
+
+            return response;
+        } catch(e) {
+            console.error('❌ UserService: Error al obtener token por userId');
+            console.error('❌ Error completo:', e);
+            console.error('❌ Error message:', e.message);
+
+            if (e.response) {
+                console.error('❌ Response status:', e.response.status);
+                console.error('❌ Response data:', e.response.data);
+            }
+
+            throw e;
+        }
     }
 
     async getAllUsers() {
@@ -46,9 +166,8 @@ export class UserService {
 
     async getCompanyInformationByCode(identificationCode) {
         try {
-            // Obtenemos la información de la compañía usando el identificationCode
             const companyResponse = await this.http.get(`companies/?identificationCode=${identificationCode}`);
-            return companyResponse.data[0]; // como es un array, obtenemos el objeto que es unico
+            return companyResponse.data[0];
         } catch (error) {
             console.error(`Error al obtener la información de la compañía con el código de identificación ${identificationCode}:`, error);
             throw error;
@@ -69,7 +188,6 @@ export class UserService {
         }
     }
 
-    // obtener usuarios registrados por role de Team o Director
     async getUsersByRole( role ) {
         try {
             const response = await this.http.get(`users/?role=${role}`);
@@ -97,11 +215,7 @@ export class UserService {
             console.log('user to update', user)
 
             const parts = user.name.trim().split(' ');
-
-            // Primer nombre es el primer elemento
             const firstName = parts[0] || '';
-
-            // Segundo nombre será el resto de la cadena después del primer nombre (si hay más)
             const lastName = parts.slice(1).join(' ') || '';
 
             const userbody = {
