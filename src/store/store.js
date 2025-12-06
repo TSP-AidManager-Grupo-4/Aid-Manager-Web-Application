@@ -1,21 +1,20 @@
 import {createStore} from "vuex";
 import {User} from "@/models/user.entity.js";
 import {UserService} from "@/services/user.service.js";
+import { authService } from "@/services/auth.service.js";
 
 const userService = new UserService();
 
 export const store = createStore({
 
     state: {
-        // recupramos la data de user que se seteo al inicia el loggin en este caso como 'user'
-        user: JSON.parse(localStorage.getItem('user')) || User,
+        user: authService.getUser() || JSON.parse(localStorage.getItem('user')) || User,
         form: {},
-        selectedProject: null // Nuevo: para el proyecto seleccionado
+        selectedProject: null
     },
     mutations: {
         setToken(state, token) {
-            state.token = token;
-            localStorage.setItem('token', token);
+            sessionStorage.setItem('accessToken', token);
         },
         setUser(state, userId) {
             console.log('Trying to get user with ID:', userId);
@@ -24,16 +23,13 @@ export const store = createStore({
                 localStorage.setItem('user', JSON.stringify(response.data));
                 console.log('User data retrieved:', response.data);
             })
-            // se llama al metodo cuando el usuario se logeo y manda la data al local storage
-            // para que la data persista cuando se haga un reload
         },
         removeUser( state ) {
             state.user = User;
             localStorage.removeItem('user');
         },
         removeToken( state ) {
-            state.token = null;
-            localStorage.removeItem('token');
+            sessionStorage.removeItem('accessToken');
         },
         updateUserCompanyName(state, companyName) {
             state.user.companyName = companyName;
@@ -57,6 +53,11 @@ export const store = createStore({
         async updateUser({ commit }, updatedUser) {
             console.log('Updating user:', updatedUser);
             commit('setUser', updatedUser.id);
+        },
+        async logout({ commit }) {
+            await authService.logout();
+            commit('removeUser');
+            commit('removeToken');
         }
     }
 });
