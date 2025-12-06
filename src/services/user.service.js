@@ -1,12 +1,14 @@
 import axios from "axios";
 import {environment} from "@/environment/environment.js";
+import { authService } from "./auth.service.js";
 
 export class UserService {
 
     http = null;
     constructor() {
         this.http = axios.create({
-            baseURL: environment.baseUrl
+            baseURL: environment.baseUrl,
+            withCredentials: true
         })
     }
 
@@ -23,14 +25,13 @@ export class UserService {
 
     async signInUser(username, password) {
         try {
-            return await this.http.post('authentication/sign-in', {
-                email: username,
-                password: password
-            })
+            // Use authService for OAuth2/JWT flow
+            const response = await authService.login(username, password);
+            return response;
         }catch(e) {
-            return e;
+            console.log('Error signing in user', e);
+            throw e;
         }
-
     }
 
     async getAllUsers() {
@@ -46,9 +47,8 @@ export class UserService {
 
     async getCompanyInformationByCode(identificationCode) {
         try {
-            // Obtenemos la información de la compañía usando el identificationCode
             const companyResponse = await this.http.get(`companies/?identificationCode=${identificationCode}`);
-            return companyResponse.data[0]; // como es un array, obtenemos el objeto que es unico
+            return companyResponse.data[0];
         } catch (error) {
             console.error(`Error al obtener la información de la compañía con el código de identificación ${identificationCode}:`, error);
             throw error;
@@ -69,7 +69,6 @@ export class UserService {
         }
     }
 
-    // obtener usuarios registrados por role de Team o Director
     async getUsersByRole( role ) {
         try {
             const response = await this.http.get(`users/?role=${role}`);
@@ -98,10 +97,7 @@ export class UserService {
 
             const parts = user.name.trim().split(' ');
 
-            // Primer nombre es el primer elemento
             const firstName = parts[0] || '';
-
-            // Segundo nombre será el resto de la cadena después del primer nombre (si hay más)
             const lastName = parts.slice(1).join(' ') || '';
 
             const userbody = {
@@ -148,8 +144,10 @@ export class UserService {
     }
 
     getHeadersAuthorization() {
+        // Use authService token from OAuth2/JWT flow or fallback to localStorage
+        const token = authService.getAccessToken() || localStorage.getItem('token');
         return {
-            "Authorization": `Bearer ${localStorage.getItem('token')}`,
+            "Authorization": `Bearer ${token}`,
             "Content-Type": "application/json"
         }
     }
