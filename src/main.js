@@ -3,8 +3,6 @@ import App from './App.vue'
 import './assets/main.css'
 import Clipboard from 'v-clipboard'
 
-
-
 // Add PrimeVue
 import PrimeVue from "primevue/config";
 import { store } from "@/store/store.js";
@@ -28,10 +26,10 @@ import Dialog from "primevue/dialog";
 import InputNumber from "primevue/inputnumber";
 import Textarea from "primevue/textarea";
 import Dropdown from "primevue/dropdown";
+
 // App Theme
 import 'primevue/resources/themes/md-light-indigo/theme.css';
 import 'primevue/resources/primevue.min.css';
-
 
 // PrimeIcons
 import 'primeicons/primeicons.css';
@@ -39,6 +37,10 @@ import 'primeicons/primeicons.css';
 // PrimeFlex
 import 'primeflex/primeflex.css';
 import router from "@/router/index.js";
+
+// Setup axios interceptors
+import { setupAxiosInterceptors } from "@/services/axios.interceptor.js";
+setupAxiosInterceptors();
 
 //gtag
 import { configure } from "vue-gtag";
@@ -55,7 +57,7 @@ configure({
   pageTracker: {
     router,
     template: (to) => ({
-      page_title: to.meta.title || 'Default Title', // Usa el título de la ruta o un valor por defecto
+      page_title: to.meta.title || 'Default Title',
       path_path: to.path,
       useScreenview: true
     })
