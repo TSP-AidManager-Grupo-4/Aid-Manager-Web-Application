@@ -13,32 +13,34 @@ export default {
       passwordFieldType: 'password',
       isRegistered: false,
       showDialog: false,
-      message_error: ""
+      message_error: "",
+      isLoading: false
     }
   },
   methods: {
     async handleSubmitLogin() {
       this.isRegistered = false;
+      this.isLoading = true;
 
-      await this.userService.signInUser(this.email, this.password)
-          .then(async(res) => {
-            console.log('res', res)
+      try {
+        const res = await this.userService.signInUser(this.email, this.password);
+        console.log('res', res);
 
-            if(res.status === 200) {
-              this.$store.commit('setToken', res.data.token);
-              this.$store.commit('setUser', res.data.id);
-              this.isRegistered = true;
-                this.$router.push('/home');
-            }else {
-              this.message_error = res.response.data;
-              this.showDialog = true;
-            }
-          })
-
-
-
-      if (!this.isRegistered) {
+        if(res && res.success) {
+          this.$store.commit('setToken', res.accessToken);
+          this.$store.commit('setUser', res.user.id);
+          this.isRegistered = true;
+          this.$router.push('/home');
+        } else {
+          this.message_error = res?.message || 'Login failed. Please try again.';
+          this.showDialog = true;
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        this.message_error = error?.response?.data?.message || error?.message || 'An error occurred during login.';
         this.showDialog = true;
+      } finally {
+        this.isLoading = false;
       }
     },
 
@@ -49,7 +51,6 @@ export default {
     togglePasswordFieldType() {
       this.passwordFieldType = this.passwordFieldType === 'password' ? 'text' : 'password';
     }
-
   },
   mounted() {
     const gtagId = import.meta.env.VITE_GTAG;
@@ -73,23 +74,30 @@ export default {
         <input type="email" placeholder="Email"
                class="input-field p-3" v-model="email"
                @input="validateForm"
+               :disabled="isLoading"
         />
         <div class="password-field">
           <input :type="passwordFieldType" placeholder="Password"
                  class="input-field p-3" v-model="password"
                  @input="validateForm"
+                 :disabled="isLoading"
           />
           <i :class="passwordFieldType === 'password' ? 'pi pi-eye' : 'pi pi-eye-slash'"
              @click="togglePasswordFieldType"
              class="toggle-icon"
+             :style="{ opacity: isLoading ? 0.5 : 1 }"
           ></i>
         </div>
 
         <a class="link" href="#" style="color: #02513D; font-style:italic; font-size: 0.8rem;">Forgot your password?</a>
-
-        <button :disabled="!formValid" type="submit" class="button p-3" style="color: #fff; margin-top:30px">Sign in
-        </button>
-
+        <div class="colapse;flex flex-column gap-3" >
+          <button type="button" class="button p-3" style="color: #fff" :disabled="isLoading">
+            Login with Google
+          </button>
+          <button :disabled="!formValid || isLoading" type="submit" class="button p-3" style="color: #fff; margin-top:30px">
+            {{ isLoading ? 'Signing in...' : 'Sign in' }}
+          </button>
+        </div>
       </form>
     </div>
     <h3 class="card-footer">New to AidManager?
